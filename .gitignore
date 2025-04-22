@@ -1,1 +1,6 @@
 .env
+*.exe
+*.sum
+*.log
+*.out
+*.mod
