@@ -751,13 +751,47 @@ class Baseline:
             # Add startup notification
             self.add_notification("Welcome to Baseline", "info")
 
-            with Live(self.render(), refresh_per_second=4, screen=True) as live:
-                while True:
-                    # Update display
-                    live.update(self.render())
+            # For Windows, use msvcrt for keyboard input
+            if os.name == "nt":
+                import msvcrt
 
-                    # Sleep briefly to prevent high CPU usage
-                    time.sleep(0.25)
+                with Live(self.render(), refresh_per_second=4, screen=True) as live:
+                    while True:
+                        # Check for keypress (non-blocking)
+                        if msvcrt.kbhit():
+                            key = msvcrt.getch().decode("utf-8", errors="ignore")
+                            self.process_key(key)
+
+                        # Update display with fresh content
+                        live.update(self.render())
+
+                        # Sleep briefly to prevent high CPU usage
+                        time.sleep(0.1)
+            else:
+                # For non-Windows platforms using getch from curses
+                import curses
+
+                # Initialize curses for key capture
+                stdscr = curses.initscr()
+                curses.noecho()
+                curses.cbreak()
+                stdscr.nodelay(True)  # Non-blocking input
+
+                with Live(self.render(), refresh_per_second=4, screen=True) as live:
+                    while True:
+                        # Check for keypress
+                        try:
+                            key = stdscr.getkey()
+                            self.process_key(key)
+                        except curses.error:
+                            # No key pressed
+                            pass
+
+                        # Update display
+                        live.update(self.render())
+
+                        # Sleep briefly to prevent high CPU usage
+                        time.sleep(0.1)
         except KeyboardInterrupt:
             # Show cursor again before exiting
             print("\033[?25h", end="")
@@ -765,6 +799,12 @@ class Baseline:
         finally:
             # Always ensure cursor is visible when exiting
             print("\033[?25h", end="")
+
+            # Clean up curses if used
+            if os.name != "nt":
+                curses.echo()
+                curses.nocbreak()
+                curses.endwin()
 
 
 if __name__ == "__main__":
