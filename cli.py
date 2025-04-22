@@ -31,7 +31,7 @@ BRIGHT_AMBER = "#FFDF00"
 
 # Weather API key (replace with your own from weatherapi.com)
 WEATHER_API_KEY = "YOUR_API_KEY"
-WEATHER_LOCATION = "London"  # Change to your location
+WEATHER_LOCATION = "Lahore"  # Change to your location
 
 class RetroDashboard:
     def __init__(self):
