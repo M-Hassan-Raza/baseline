@@ -597,22 +597,42 @@ class Baseline:
         """Process a key press based on the current focus"""
         # Command mode input handling
         if self.current_focus == "command":
-            if key == "\r" or key == "\n":  # Handle Enter key variations
+            if key == "enter":  # Handle Enter key variations (mapped in run)
                 self.process_command(self.command_input)
-            elif key == "\x1b":  # Escape key
+            elif key == "escape":  # Escape key
                 self.command_input = ""
                 self.current_focus = "dashboard"
-            elif key == "\x08" or key == "\x7f":  # Backspace/Delete keys
+            elif key == "backspace":  # Backspace/Delete keys
                 self.command_input = self.command_input[:-1]
-            elif key == "\t" and self.command_history:  # Tab for history
-                self.tab_index = (self.tab_index + 1) % len(self.command_history)
+            elif key == "tab" and self.command_history:  # Tab for history
+                # Cycle through history, ensure index stays within bounds
+                if (
+                    not self.command_input
+                    or self.command_input not in self.command_history
+                ):
+                    # If starting fresh or input changed, start from the most recent
+                    self.tab_index = -1
+                else:
+                    # Find current input index to cycle from there
+                    try:
+                        current_input_index = self.command_history.index(
+                            self.command_input
+                        )
+                        self.tab_index = (current_input_index - 1) % len(
+                            self.command_history
+                        )  # Cycle backwards
+                    except ValueError:
+                        self.tab_index = -1  # Default to most recent if not found
+
                 self.command_input = self.command_history[self.tab_index]
+
             elif key.isprintable():  # Only add printable characters
                 self.command_input += key
+                self.tab_index = -1  # Reset tab index on new input
 
         # Todo input mode handling
         elif self.todo_input_mode:
-            if key == "\r" or key == "\n":  # Enter key
+            if key == "enter":  # Enter key (mapped in run)
                 if self.new_todo_text:
                     self.todo_items.append(
                         {
@@ -627,10 +647,10 @@ class Baseline:
                     )
                 self.new_todo_text = ""
                 self.todo_input_mode = False
-            elif key == "\x1b":  # Escape key
+            elif key == "escape":  # Escape key
                 self.new_todo_text = ""
                 self.todo_input_mode = False
-            elif key == "\x08" or key == "\x7f":  # Backspace/Delete keys
+            elif key == "backspace":  # Backspace/Delete keys
                 self.new_todo_text = self.new_todo_text[:-1]
             elif key.isprintable():  # Only add printable characters
                 self.new_todo_text += key
@@ -695,22 +715,36 @@ class Baseline:
                         if msvcrt.kbhit():
                             # Decode bytes to string, handle potential errors
                             try:
-                                key = msvcrt.getch().decode("utf-8", errors="ignore")
-                                # Map special keys if needed (e.g., Enter, Backspace)
-                                if key == "\r":
-                                    key = "enter"  # Map Enter
-                                elif key == "\x08":
-                                    key = "backspace"  # Map Backspace
-                                elif key == "\x1b":
-                                    key = "escape"  # Map Escape
-                                elif key == "\t":
-                                    key = "tab"  # Map Tab
-                                # Add other mappings as necessary
-                                self.process_key(key)
+                                char_code = msvcrt.getch()
+                                # Handle special keys (like function keys, arrows) which send multiple bytes starting with 0xe0 or 0x00
+                                if char_code in (b"\x00", b"\xe0"):
+                                    # Read the second byte for special keys
+                                    msvcrt.getch()  # Consume the second byte for now, can map later if needed
+                                    key = "special_key_ignored"  # Placeholder
+                                else:
+                                    key = char_code.decode("utf-8", errors="ignore")
+                                    # Map common keys consistently
+                                    if key == "\r":
+                                        key = "enter"
+                                    elif key == "\x08":
+                                        key = "backspace"
+                                    elif key == "\x1b":
+                                        key = "escape"
+                                    elif key == "\t":
+                                        key = "tab"
+                                    # Add other mappings as necessary (e.g., function keys if needed)
+
+                                if key != "special_key_ignored":
+                                    self.process_key(key)
                             except UnicodeDecodeError:
                                 pass  # Ignore undecodable bytes
+                            except (
+                                Exception
+                            ) as e:  # Catch other potential errors during input processing
+                                self.add_notification(f"Input error: {e}", "error")
+                        # Update the live display regardless of key press
                         live.update(self.render())
-                        time.sleep(0.1)
+                        # Removed time.sleep(0.1) - Rely on Live's refresh_per_second
             else:
                 import curses
 
@@ -719,28 +753,95 @@ class Baseline:
                 curses.cbreak()
                 stdscr.nodelay(True)  # Non-blocking input
                 stdscr.keypad(True)  # Enable special keys like arrows, backspace
+                curses.start_color()  # Ensure colors work if needed later
+                # Optional: Initialize color pairs if using curses colors directly
+                # curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLACK)
 
-                with Live(self.render(), refresh_per_second=4, screen=True) as live:
+                with Live(
+                    self.render(), refresh_per_second=4, screen=True, console=console
+                ) as live:
                     while True:
+                        key = None
                         try:
                             key_code = stdscr.getch()  # Use getch for key codes
                             if key_code != -1:
-                                key = curses.keyname(key_code).decode("utf-8")
-                                # Map curses key names to expected values
-                                if key == "^M" or key == "\n":
+                                # Map curses key codes/names to consistent values
+                                if (
+                                    key_code == curses.KEY_ENTER
+                                    or key_code == 10
+                                    or key_code == 13
+                                ):
                                     key = "enter"
-                                elif key == "^?" or key == "KEY_BACKSPACE":
+                                elif (
+                                    key_code == curses.KEY_BACKSPACE
+                                    or key_code == 127
+                                    or key_code == 8
+                                ):
                                     key = "backspace"
-                                elif key == "^[":
-                                    key = "escape"  # Often Escape sequence start
-                                elif key == "^I":
+                                elif key_code == 27:  # Escape key code
+                                    # Check for Alt sequences (like Alt+key) which start with ESC
+                                    # This is a simple check; more robust handling might be needed
+                                    stdscr.nodelay(True)  # Make next getch non-blocking
+                                    next_key = stdscr.getch()
+                                    stdscr.nodelay(
+                                        True
+                                    )  # Set back to original nodelay state
+                                    if next_key == -1:
+                                        key = "escape"  # Just Escape was pressed
+                                    else:
+                                        key = f"alt_{curses.keyname(next_key).decode('utf-8')}"  # Or handle Alt sequence
+                                        # For now, maybe just ignore alt sequences or map specific ones
+                                        key = "alt_sequence_ignored"
+                                elif key_code == curses.KEY_RESIZE:
+                                    # Handle terminal resize if necessary, e.g., redraw layout
+                                    # For Rich's Live, it might handle some resizing automatically
+                                    live.update(self.render())  # Force redraw on resize
+                                    key = "resize_handled"
+                                elif key_code == 9:  # Tab key
                                     key = "tab"
-                                # Add more mappings if needed (e.g., KEY_UP, KEY_DOWN)
-                                self.process_key(key)
-                        except curses.error:
-                            pass  # No key pressed
+                                # Map other special keys (arrows, F-keys) if needed
+                                # elif key_code == curses.KEY_UP: key = "up"
+                                # elif key_code == curses.KEY_DOWN: key = "down"
+                                else:
+                                    # Try to decode regular keys
+                                    try:
+                                        key_char = curses.keyname(key_code).decode(
+                                            "utf-8"
+                                        )
+                                        # Handle multi-byte chars or special names if necessary
+                                        if (
+                                            key_char.isprintable()
+                                            and len(key_char) == 1
+                                        ):  # Basic check for printable char
+                                            key = key_char
+                                        # else:
+                                        # Could be a named key like 'kUP5' for Shift+Up, handle if needed
+                                        # key = f"special_{key_char}" # Placeholder
+                                    except Exception:
+                                        pass  # Ignore keys that can't be decoded simply
+
+                                if key and key not in [
+                                    "resize_handled",
+                                    "alt_sequence_ignored",
+                                    "special_key_ignored",
+                                ]:
+                                    self.process_key(key)
+                        except curses.error as e:
+                            # Ignore "no input" error which happens with nodelay(True)
+                            if "no input" not in str(e):
+                                self.add_notification(f"Input error: {e}", "error")
+                                # Consider breaking or handling specific curses errors
+                        except Exception as e:  # Catch other potential errors
+                            self.add_notification(f"General error: {e}", "error")
+
+                        # Update the live display regardless of key press
                         live.update(self.render())
-                        time.sleep(0.1)
+                        # Removed time.sleep(0.1) - Rely on Live's refresh_per_second
+                        # Add a very small sleep if CPU usage is too high without it
+                        time.sleep(
+                            0.01
+                        )  # Small sleep to prevent high CPU usage in the loop
+
         except KeyboardInterrupt:
             print("\033[?25h", end="")
             print("Dashboard terminated.")
