@@ -1,0 +1,6 @@
+rich
+requests
+python-dateutil
+psutil
+python-dotenv
+msvcrt; sys_platform == 'win32' # For Windows keyboard input
