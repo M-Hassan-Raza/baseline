@@ -1,4 +1,4 @@
-# Retro Terminal Dashboard
+# Baseline Terminal Dashboard
 # A CLI dashboard with amber-on-black terminal aesthetic
 # Requirements: pip install rich requests python-dateutil psutil python-dotenv
 
@@ -42,7 +42,7 @@ WEATHER_LOCATION = os.getenv("WEATHER_LOCATION", "Lahore")
 CPU_COUNT = psutil.cpu_count() or 1
 
 
-class RetroDashboard:
+class Baseline:
     def __init__(self):
         self.layout = Layout()
         self.todo_items = self.load_todos()
@@ -57,7 +57,7 @@ class RetroDashboard:
         self.tab_index = 0
 
         # Create data directory if it doesn't exist
-        self.data_dir = Path.home() / ".retro_terminal"
+        self.data_dir = Path.home() / ".baseline"
         self.data_dir.mkdir(exist_ok=True)
 
         # Load system monitoring history
@@ -91,7 +91,7 @@ class RetroDashboard:
 
     def load_todos(self):
         """Load todo items from file or create sample ones if file doesn't exist"""
-        todo_file = Path.home() / ".retro_terminal" / "todos.json"
+        todo_file = Path.home() / ".baseline" / "todos.json"
         try:
             if todo_file.exists():
                 with open(todo_file, "r") as f:
@@ -126,7 +126,7 @@ class RetroDashboard:
 
     def save_todos(self):
         """Save todo items to file"""
-        todo_file = Path.home() / ".retro_terminal" / "todos.json"
+        todo_file = Path.home() / ".baseline" / "todos.json"
         try:
             with open(todo_file, "w") as f:
                 json.dump(self.todo_items, f)
@@ -243,7 +243,7 @@ class RetroDashboard:
     def get_header(self):
         """Create the header panel"""
         now = datetime.datetime.now()
-        header_text = Text(f"RETRO TERMINAL DASHBOARD", style=AMBER, justify="center")
+        header_text = Text(f"BASELINE", style=AMBER, justify="center")
         hostname = socket.gethostname()
         username = (
             os.getlogin() if hasattr(os, "getlogin") else os.environ.get("USER", "user")
@@ -769,7 +769,7 @@ class RetroDashboard:
 
 if __name__ == "__main__":
     # Set terminal title
-    print("\033]0;Retro Terminal Dashboard\007", end="")
+    print("\033]0;Baseline\007", end="")
 
     # Apply terminal styling for amber-on-black effect
     # Note: This may not work in all terminals
@@ -777,5 +777,5 @@ if __name__ == "__main__":
     print("\033]11;#000000\007", end="")  # Set background to black
 
     # Run the dashboard
-    dashboard = RetroDashboard()
+    dashboard = Baseline()
     dashboard.run()
