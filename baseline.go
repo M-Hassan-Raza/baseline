@@ -1270,9 +1270,13 @@ func (b *Baseline) inputHandler(event *tcell.EventKey) *tcell.EventKey {
 // --- Main Loop ---
 
 func (b *Baseline) Run() error {
+	// Add more error information
+	log.Println("Setup layout starting...")
 	b.setupLayout()
+	log.Println("Setup layout complete")
 
 	// Initial data fetch and UI update
+	log.Println("Updating initial UI...")
 	b.updateHeader()
 	go b.updateSystemInfo() // Run initial fetch in background
 	go b.fetchWeather()
@@ -1280,17 +1284,21 @@ func (b *Baseline) Run() error {
 	b.updateTodos() // Initial todo list render
 	b.updateFooter() // Initial footer state
 	b.addNotification("Welcome to Baseline (Go version)", "info")
+	log.Println("Initial UI updates complete")
 
 	// Periodic updates using tickers
+	log.Println("Setting up tickers...")
 	sysTicker := time.NewTicker(refreshInterval)
 	defer sysTicker.Stop()
 	weatherTicker := time.NewTicker(15 * time.Minute) // Weather less frequent
 	defer weatherTicker.Stop()
 	timeTicker := time.NewTicker(1 * time.Second) // Update time every second
 	defer timeTicker.Stop()
+	log.Println("Tickers initialized")
 
 	// Goroutine for handling periodic updates
 	go func() {
+		log.Println("Update goroutine started")
 		// Initial weather fetch delay (don't fetch immediately again)
 		time.Sleep(2 * time.Second)
 
@@ -1303,37 +1311,66 @@ func (b *Baseline) Run() error {
 			case <-timeTicker.C:
 				// Time update is cheap, can do directly or queue if needed
 				b.updateTime()
-				// Also update header which contains date (cheap)
-				// b.updateHeader() // Header doesn't change per second
-				// Footer update is handled by actions or periodically if needed
-				// b.updateFooter()
-			// --- Fix Start ---
-			// Removed case <-b.app.Context().Done():
-			// The goroutine will exit when the main program exits.
-			// --- Fix End ---
-
-			// Add a way to stop this goroutine if the app stops?
-			// A quit channel could be used, signaled before app.Stop()
-			// Or rely on main program exit.
 			}
 		}
 	}()
 
 	// Set global input capture
 	b.app.SetInputCapture(b.inputHandler)
+	log.Println("Input handler set")
 
 	// Run the application
 	// Set Root and Focus outside the Run() call
+	log.Println("Setting root and running app...")
 	b.app.SetRoot(b.layout, true).SetFocus(b.layout)
-	if err := b.app.Run(); err != nil {
-		// Log error before returning
-		log.Printf("Error running application: %v", err)
-		return fmt.Errorf("failed to run application: %w", err)
+	
+	// Create a timeout channel to detect if the app hangs
+	timeout := make(chan bool, 1)
+	go func() {
+		time.Sleep(5 * time.Second)
+		timeout <- true
+	}()
+	
+	// Create a done channel to signal application completion
+	done := make(chan error, 1)
+	go func() {
+		done <- b.app.Run()
+	}()
+	
+	// Wait for either app to complete or timeout
+	select {
+	case err := <-done:
+		if err != nil {
+			log.Printf("Error running application: %v", err)
+			return fmt.Errorf("failed to run application: %w", err)
+		}
+		return nil
+	case <-timeout:
+		// If we reach here, the app might be hanging
+		log.Println("Application appears to be hanging, showing fallback mode")
+		// Stop the tview app (might not work if it's truly hung)
+		go func() {
+			b.app.Stop()
+		}()
+		
+		// Fall back to simple text mode
+		clearScreen()
+		fmt.Println("---------------------------------------")
+		fmt.Println("BASELINE - FALLBACK TEXT MODE")
+		fmt.Println("---------------------------------------")
+		fmt.Println("The TUI (Terminal User Interface) could not be initialized.")
+		fmt.Println("This might be due to terminal compatibility issues.")
+		fmt.Println("\nPlease check:")
+		fmt.Println("1. Are you using a compatible terminal?")
+		fmt.Println("2. Does your terminal support TUI applications?")
+		fmt.Println("3. Is your TERM environment variable set correctly?")
+		fmt.Println("\nCurrent environment:")
+		fmt.Printf("TERM=%s\n", os.Getenv("TERM"))
+		fmt.Printf("OS=%s\n", runtime.GOOS)
+		fmt.Println("\nPress Enter to exit...")
+		fmt.Scanln() // Wait for user input
+		return fmt.Errorf("application timeout - possible terminal compatibility issue")
 	}
-
-	// Application stopped gracefully
-	log.Println("Application stopped.")
-	return nil
 }
 
 // --- Entry Point ---
@@ -1364,6 +1401,8 @@ func main() {
 
 	// Print initialization message
 	fmt.Println("Initializing TUI components...")
+	fmt.Println("If the application appears to hang, check baseline_debug.log")
+	fmt.Println("for troubleshooting information.")
 
 	baselineApp := NewBaseline()
 	fmt.Println("Starting TUI application. Press 'q' to quit.")

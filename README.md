@@ -1,4 +1,4 @@
-```markdown
+
 # BASELINE v0.1: Your Terminal Baseline Test
 
 ## Amber Glow for a Grey Existence
@@ -117,6 +117,3 @@ This tool is provided without warranty. It may not solve your fundamental proble
 *   Data acquired through `requests`, `psutil`, and the reluctant cooperation of various system libraries.
 *   Inspired by flickering displays, synthetic melancholy, and the persistent need for a task list, even when the tasks are pointless.
 *   The amber is non-negotiable (unless you change the theme).
-
-```
-```
