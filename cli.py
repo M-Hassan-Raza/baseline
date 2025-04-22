@@ -26,19 +26,17 @@ from dotenv import load_dotenv
 env_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
-# Configure the console with amber-on-black theme
 console = Console(color_system="standard", highlight=False)
 
-# Custom amber color theme (approximating the vintage amber monitor look)
+# Custom amber color theme
 AMBER = "#FFBF00"
 DIM_AMBER = "#CC9900"
 BRIGHT_AMBER = "#FFDF00"
 
-# Get configuration from environment variables
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY", "YOUR_API_KEY")
 WEATHER_LOCATION = os.getenv("WEATHER_LOCATION", "Lahore")
 
-# Get number of CPU cores for normalizing CPU percentages
+# Get number of CPU cores for normalizing CPU percentages in process list
 CPU_COUNT = psutil.cpu_count() or 1
 
 
@@ -60,15 +58,12 @@ class Baseline:
         self.data_dir = Path.home() / ".baseline"
         self.data_dir.mkdir(exist_ok=True)
 
-        # Load system monitoring history
         self.system_history = self.load_system_history()
         self.last_update = time.time()
 
-        # Track network statistics for monitoring
         self.last_net_io = psutil.net_io_counters()
         self.last_net_time = time.time()
 
-        # Load themes from config
         self.theme = os.getenv("THEME", "amber")
         self.themes = {
             "amber": {"main": "#FFBF00", "dim": "#CC9900", "bright": "#FFDF00"},
@@ -76,7 +71,6 @@ class Baseline:
             "blue": {"main": "#00BFFF", "dim": "#0099CC", "bright": "#99CCFF"},
         }
 
-        # Add shortcuts help
         self.shortcuts = {
             "n": "New TODO",
             "t": "Toggle TODO",
@@ -97,7 +91,7 @@ class Baseline:
                 with open(todo_file, "r") as f:
                     return json.load(f)
             else:
-                # Default todo items
+                # Default todo items if file not found
                 return [
                     {
                         "text": "Review project documentation",
@@ -141,7 +135,7 @@ class Baseline:
                 with open(history_file, "r") as f:
                     return json.load(f)
             else:
-                # Create empty history
+                # Create empty history structure
                 return {
                     "cpu": [],
                     "memory": [],
@@ -160,10 +154,9 @@ class Baseline:
             }
 
     def save_system_history(self):
-        """Save system monitoring history"""
+        """Save system monitoring history, keeping only the last 60 data points"""
         history_file = self.data_dir / "system_history.json"
         try:
-            # Only keep the last 60 data points
             for key in self.system_history:
                 if len(self.system_history[key]) > 60:
                     self.system_history[key] = self.system_history[key][-60:]
@@ -174,25 +167,18 @@ class Baseline:
             self.add_notification(f"Error saving system history: {str(e)}", "error")
 
     def update_system_history(self):
-        """Update system monitoring history"""
+        """Update system monitoring history, throttled to run every 5 seconds"""
         current_time = time.time()
-
-        # Only update every 5 seconds
         if current_time - self.last_update < 5:
             return
-
         self.last_update = current_time
 
-        # Get current stats
         cpu_percent = psutil.cpu_percent()
         memory_percent = psutil.virtual_memory().percent
-
-        # Get network stats
         net_io = psutil.net_io_counters()
         net_in = net_io.bytes_recv
         net_out = net_io.bytes_sent
 
-        # Add to history
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         self.system_history["cpu"].append(cpu_percent)
         self.system_history["memory"].append(memory_percent)
@@ -200,11 +186,10 @@ class Baseline:
         self.system_history["network_in"].append(net_in)
         self.system_history["network_out"].append(net_out)
 
-        # Save history
         self.save_system_history()
 
     def setup_layout(self):
-        """Set up the dashboard layout"""
+        """Set up the dashboard layout using Rich"""
         self.layout.split(
             Layout(name="header", size=3),
             Layout(name="main", ratio=1),
@@ -227,7 +212,7 @@ class Baseline:
         )
 
     def add_notification(self, message, type="info"):
-        """Add a notification to the dashboard"""
+        """Add a notification, keeping only the last 5"""
         self.notifications.append(
             {
                 "message": message,
@@ -235,8 +220,6 @@ class Baseline:
                 "time": datetime.datetime.now().strftime("%H:%M:%S"),
             }
         )
-
-        # Keep only the last 5 notifications
         if len(self.notifications) > 5:
             self.notifications = self.notifications[-5:]
 
@@ -263,19 +246,14 @@ class Baseline:
 
     def get_system_info(self):
         """Create the system info panel with graphs"""
-        # Update system history
         self.update_system_history()
 
-        # Get system information
         cpu_percent = psutil.cpu_percent()
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage("/")
 
-        # Create text content
         system_text = Text()
         system_text.append("SYSTEM STATUS\n", style=f"bold {BRIGHT_AMBER}")
-
-        # System info
         system_text.append(f"Host: {platform.node()}\n", style=AMBER)
         system_text.append(
             f"OS: {platform.system()} {platform.release()}\n", style=AMBER
@@ -283,7 +261,6 @@ class Baseline:
         uptime = datetime.timedelta(seconds=int(time.time() - psutil.boot_time()))
         system_text.append(f"Uptime: {uptime}\n", style=AMBER)
 
-        # CPU and memory graphs as text bars
         system_text.append("\nCPU: ", style=AMBER)
         cpu_bar = self.create_bar(cpu_percent)
         system_text.append(f"{cpu_bar} {cpu_percent}%\n", style=BRIGHT_AMBER)
@@ -296,7 +273,7 @@ class Baseline:
         disk_bar = self.create_bar(disk.percent)
         system_text.append(f"{disk_bar} {disk.percent}%\n", style=BRIGHT_AMBER)
 
-        # Network I/O throughput
+        # Network I/O throughput calculation
         try:
             current_net_io = psutil.net_io_counters()
             current_time = time.time()
@@ -306,25 +283,22 @@ class Baseline:
                 rx_rate = (
                     (current_net_io.bytes_recv - self.last_net_io.bytes_recv)
                     / time_diff
-                    / 1024
-                )  # KB/s
+                    / 1024  # KB/s
+                )
                 tx_rate = (
                     (current_net_io.bytes_sent - self.last_net_io.bytes_sent)
                     / time_diff
-                    / 1024
-                )  # KB/s
-
+                    / 1024  # KB/s
+                )
                 system_text.append(
                     f"NET: ↓ {rx_rate:.1f} KB/s ↑ {tx_rate:.1f} KB/s\n", style=AMBER
                 )
-
-                # Update last values
                 self.last_net_io = current_net_io
                 self.last_net_time = current_time
         except Exception as e:
             system_text.append(f"NET: Error measuring network I/O\n", style=DIM_AMBER)
 
-        # Running processes (top 3 by CPU)
+        # Running processes (top 3 by CPU, normalized)
         system_text.append("\nTOP PROCESSES:\n", style=AMBER)
         processes = []
         for proc in psutil.process_iter(["pid", "name", "cpu_percent"]):
@@ -357,7 +331,6 @@ class Baseline:
         weather_text.append("WEATHER REPORT\n", style=f"bold {BRIGHT_AMBER}")
 
         try:
-            # Try to get weather data from API
             if WEATHER_API_KEY == "YOUR_API_KEY":
                 # Sample data if no API key provided
                 weather_text.append(f"Location: {WEATHER_LOCATION}\n", style=AMBER)
@@ -366,12 +339,10 @@ class Baseline:
                 weather_text.append(f"Humidity: 65%\n", style=DIM_AMBER)
                 weather_text.append(f"Wind: 8 km/h\n", style=DIM_AMBER)
 
-                # Add message about setting up API key
                 weather_text.append(
                     "\nSet WEATHER_API_KEY in .env file\n", style=DIM_AMBER
                 )
 
-                # ASCII art for weather condition
                 weather_text.append("\n    \\  /\n", style=BRIGHT_AMBER)
                 weather_text.append('  _ /"".-.    \n', style=BRIGHT_AMBER)
                 weather_text.append("    \\_(   ).  \n", style=BRIGHT_AMBER)
@@ -394,14 +365,11 @@ class Baseline:
                 weather_text.append(f"Humidity: {humidity}%\n", style=DIM_AMBER)
                 weather_text.append(f"Wind: {wind_kph} km/h\n", style=DIM_AMBER)
 
-                # We could add condition-specific ASCII art here based on the
-                # condition text
-
         except Exception as e:
             weather_text.append(f"Weather data unavailable\n", style=AMBER)
             weather_text.append(f"ERROR: {str(e)}\n", style=DIM_AMBER)
 
-        # Add forecast or temperatures for next few hours
+        # Add forecast (currently static sample data)
         weather_text.append("\nFORECAST:\n", style=AMBER)
         hours = ["06:00", "12:00", "18:00", "00:00"]
         temps = ["18°C", "22°C", "20°C", "16°C"]
@@ -412,7 +380,7 @@ class Baseline:
         return Panel(weather_text, border_style=AMBER)
 
     def get_time_panel(self):
-        """Create the time panel"""
+        """Create the time panel with calendar"""
         now = datetime.datetime.now()
 
         time_text = Text()
@@ -421,23 +389,19 @@ class Baseline:
         )
         time_text.append(f"{now.strftime('%A, %B %d, %Y')}\n\n", style=AMBER)
 
-        # Calendar for current week as Text
         time_text.append("     CALENDAR     \n", style=AMBER)
         time_text.append("Mo Tu We Th Fr Sa Su\n", style=DIM_AMBER)
 
-        # Get current month calendar
         import calendar
 
         cal = calendar.monthcalendar(now.year, now.month)
 
-        # Find the current week
         current_week = None
         for i, week in enumerate(cal):
             if now.day in week:
                 current_week = i
                 break
 
-        # Add all weeks to the calendar
         for week in cal:
             week_text = ""
             for day in week:
@@ -452,7 +416,7 @@ class Baseline:
                 style=AMBER if week == cal[current_week] else DIM_AMBER,
             )
 
-        # Add upcoming appointments
+        # Add upcoming appointments (currently static sample data)
         time_text.append("\nUPCOMING:\n", style=AMBER)
         events = [
             {"time": "14:00", "name": "Team Meeting"},
@@ -468,7 +432,6 @@ class Baseline:
 
     def get_todo_panel(self):
         """Create the TODO panel"""
-        # Sort todos by priority
         sorted_todos = sorted(
             self.todo_items,
             key=lambda x: {"high": 0, "medium": 1, "low": 2}.get(
@@ -478,16 +441,13 @@ class Baseline:
 
         todo_text = Text()
 
-        # Show input box if in todo input mode
         if self.todo_input_mode:
             todo_text.append("NEW TASK:\n", style=BRIGHT_AMBER)
             todo_text.append(f"{self.new_todo_text}", style=AMBER)
-            todo_text.append("_", style=BRIGHT_AMBER)  # Cursor
+            todo_text.append("_", style=BRIGHT_AMBER)  # Cursor simulation
             todo_text.append("\n\n", style=AMBER)
 
-        # Display todo items
         for i, item in enumerate(sorted_todos):
-            # Priority indicator
             priority = item.get("priority", "medium")
             if priority == "high":
                 priority_char = "!"
@@ -499,47 +459,40 @@ class Baseline:
                 priority_char = "-"
                 priority_style = DIM_AMBER
 
-            # Todo item display with index
             todo_text.append(f"{i+1:2d} ", style=DIM_AMBER)
             todo_text.append(f"[{priority_char}] ", style=priority_style)
 
-            # Status indicator
             status = "[X]" if item["done"] else "[ ]"
             todo_text.append(
                 f"{status} ", style=BRIGHT_AMBER if item["done"] else AMBER
             )
 
-            # Task text - strikethrough if done
             if item["done"]:
-                # Simulate strikethrough with dashes
+                # Simulate strikethrough with Unicode combining character
                 task_text = "".join([c + "\u0336" for c in item["text"]])
                 todo_text.append(f"{task_text}\n", style=DIM_AMBER)
             else:
                 todo_text.append(f"{item['text']}\n", style=AMBER)
 
-        # Add help text at the bottom
         todo_help = Text(
             "\n[N]ew [T]oggle [D]elete [P]riority [Q]uit",
             style=DIM_AMBER,
             justify="center",
         )
-
         todo_text.append("\n")
         todo_text.append(todo_help)
 
         return Panel(todo_text, title="TASK LIST", border_style=AMBER)
 
     def get_footer(self):
-        """Create the footer panel with notifications and command input"""
+        """Create the footer panel with notifications or command input"""
         footer_text = Text()
 
-        # Command input
         if self.current_focus == "command":
             footer_text.append("> ", style=BRIGHT_AMBER)
             footer_text.append(f"{self.command_input}", style=AMBER)
-            footer_text.append("_", style=BRIGHT_AMBER)  # Cursor
+            footer_text.append("_", style=BRIGHT_AMBER)  # Cursor simulation
         else:
-            # Show notifications in footer
             if self.notifications:
                 latest = self.notifications[-1]
                 notification_style = {
@@ -547,7 +500,6 @@ class Baseline:
                     "error": "#FF5555",
                     "success": "#55FF55",
                 }.get(latest["type"], AMBER)
-
                 footer_text.append(f"[{latest['time']}] ", style=DIM_AMBER)
                 footer_text.append(f"{latest['message']}", style=notification_style)
             else:
@@ -558,29 +510,25 @@ class Baseline:
         return Panel(footer_text, style=AMBER, border_style=AMBER)
 
     def render(self):
-        """Render the complete dashboard"""
+        """Render the complete dashboard layout"""
         self.layout["header"].update(self.get_header())
         self.layout["system"].update(self.get_system_info())
         self.layout["weather"].update(self.get_weather())
         self.layout["time"].update(self.get_time_panel())
         self.layout["todos"].update(self.get_todo_panel())
         self.layout["footer"].update(self.get_footer())
-
         return self.layout
 
     def process_command(self, command):
-        """Process command input"""
+        """Process command input from the footer"""
         command = command.strip().lower()
-
         if not command:
             return
 
-        # Add to command history
         self.command_history.append(command)
         if len(self.command_history) > 20:
             self.command_history = self.command_history[-20:]
 
-        # Process command
         if command == "help" or command == "?":
             self.add_notification(
                 "Commands: help, todo, weather, clear, exit, theme, shortcut", "info"
@@ -624,7 +572,8 @@ class Baseline:
                 self.add_notification("Invalid todo index", "error")
         elif command.startswith("todo delete "):
             try:
-                index = int(command[12:].trip()) - 1
+                # Corrected typo: .trip() -> .strip()
+                index = int(command[12:].strip()) - 1
                 if 0 <= index < len(self.todo_items):
                     deleted = self.todo_items.pop(index)
                     self.save_todos()
@@ -641,31 +590,29 @@ class Baseline:
         else:
             self.add_notification(f"Unknown command: {command}", "error")
 
-        # Reset command input
         self.command_input = ""
         self.current_focus = "dashboard"
 
     def process_key(self, key):
-        """Process a key press"""
-        # Command mode
+        """Process a key press based on the current focus"""
+        # Command mode input handling
         if self.current_focus == "command":
-            if key == "enter":
+            if key == "\r" or key == "\n":  # Handle Enter key variations
                 self.process_command(self.command_input)
-            elif key == "escape":
+            elif key == "\x1b":  # Escape key
                 self.command_input = ""
                 self.current_focus = "dashboard"
-            elif key == "backspace":
+            elif key == "\x08" or key == "\x7f":  # Backspace/Delete keys
                 self.command_input = self.command_input[:-1]
-            elif key == "tab" and self.command_history:
-                # Command history navigation with tab
+            elif key == "\t" and self.command_history:  # Tab for history
                 self.tab_index = (self.tab_index + 1) % len(self.command_history)
                 self.command_input = self.command_history[self.tab_index]
-            else:
+            elif key.isprintable():  # Only add printable characters
                 self.command_input += key
 
-        # Todo input mode
+        # Todo input mode handling
         elif self.todo_input_mode:
-            if key == "enter":
+            if key == "\r" or key == "\n":  # Enter key
                 if self.new_todo_text:
                     self.todo_items.append(
                         {
@@ -678,28 +625,22 @@ class Baseline:
                     self.add_notification(
                         f"Added todo: {self.new_todo_text}", "success"
                     )
-
                 self.new_todo_text = ""
                 self.todo_input_mode = False
-
-            elif key == "escape":
+            elif key == "\x1b":  # Escape key
                 self.new_todo_text = ""
                 self.todo_input_mode = False
-
-            elif key == "backspace":
+            elif key == "\x08" or key == "\x7f":  # Backspace/Delete keys
                 self.new_todo_text = self.new_todo_text[:-1]
-
-            else:
+            elif key.isprintable():  # Only add printable characters
                 self.new_todo_text += key
 
         # Dashboard mode - global shortcuts
         else:
             if key == ":":
                 self.current_focus = "command"
-
             elif key == "n":
                 self.todo_input_mode = True
-
             elif key == "t" and self.todo_items:
                 # Toggle the first uncompleted todo
                 for i, item in enumerate(self.todo_items):
@@ -708,7 +649,6 @@ class Baseline:
                         self.save_todos()
                         self.add_notification(f"Completed: {item['text']}", "success")
                         break
-
             elif key == "d" and self.todo_items:
                 # Delete the first completed todo
                 for i, item in enumerate(self.todo_items):
@@ -717,7 +657,6 @@ class Baseline:
                         self.save_todos()
                         self.add_notification(f"Deleted: {deleted['text']}", "success")
                         break
-
             elif key == "p" and self.todo_items:
                 # Cycle priority of the first uncompleted todo
                 priorities = ["low", "medium", "high"]
@@ -731,10 +670,8 @@ class Baseline:
                             f"Priority set to {priorities[idx]}", "success"
                         )
                         break
-
             elif key == "q":
                 raise KeyboardInterrupt()
-
             elif key == "?":
                 self.add_notification(
                     "Keys: n(new), t(toggle), d(delete), p(priority), q(quit), :(command)",
@@ -742,80 +679,87 @@ class Baseline:
                 )
 
     def run(self):
-        """Run the dashboard with live updates"""
-        # Clear the screen and hide the cursor for a cleaner look
+        """Run the dashboard main loop with live updates and keyboard input"""
         os.system("cls" if os.name == "nt" else "clear")
         print("\033[?25l", end="")  # Hide cursor
 
         try:
-            # Add startup notification
             self.add_notification("Welcome to Baseline", "info")
 
-            # For Windows, use msvcrt for keyboard input
+            # Platform-specific keyboard input handling
             if os.name == "nt":
                 import msvcrt
 
                 with Live(self.render(), refresh_per_second=4, screen=True) as live:
                     while True:
-                        # Check for keypress (non-blocking)
                         if msvcrt.kbhit():
-                            key = msvcrt.getch().decode("utf-8", errors="ignore")
-                            self.process_key(key)
-
-                        # Update display with fresh content
+                            # Decode bytes to string, handle potential errors
+                            try:
+                                key = msvcrt.getch().decode("utf-8", errors="ignore")
+                                # Map special keys if needed (e.g., Enter, Backspace)
+                                if key == "\r":
+                                    key = "enter"  # Map Enter
+                                elif key == "\x08":
+                                    key = "backspace"  # Map Backspace
+                                elif key == "\x1b":
+                                    key = "escape"  # Map Escape
+                                elif key == "\t":
+                                    key = "tab"  # Map Tab
+                                # Add other mappings as necessary
+                                self.process_key(key)
+                            except UnicodeDecodeError:
+                                pass  # Ignore undecodable bytes
                         live.update(self.render())
-
-                        # Sleep briefly to prevent high CPU usage
                         time.sleep(0.1)
             else:
-                # For non-Windows platforms using getch from curses
                 import curses
 
-                # Initialize curses for key capture
                 stdscr = curses.initscr()
                 curses.noecho()
                 curses.cbreak()
                 stdscr.nodelay(True)  # Non-blocking input
+                stdscr.keypad(True)  # Enable special keys like arrows, backspace
 
                 with Live(self.render(), refresh_per_second=4, screen=True) as live:
                     while True:
-                        # Check for keypress
                         try:
-                            key = stdscr.getkey()
-                            self.process_key(key)
+                            key_code = stdscr.getch()  # Use getch for key codes
+                            if key_code != -1:
+                                key = curses.keyname(key_code).decode("utf-8")
+                                # Map curses key names to expected values
+                                if key == "^M" or key == "\n":
+                                    key = "enter"
+                                elif key == "^?" or key == "KEY_BACKSPACE":
+                                    key = "backspace"
+                                elif key == "^[":
+                                    key = "escape"  # Often Escape sequence start
+                                elif key == "^I":
+                                    key = "tab"
+                                # Add more mappings if needed (e.g., KEY_UP, KEY_DOWN)
+                                self.process_key(key)
                         except curses.error:
-                            # No key pressed
-                            pass
-
-                        # Update display
+                            pass  # No key pressed
                         live.update(self.render())
-
-                        # Sleep briefly to prevent high CPU usage
                         time.sleep(0.1)
         except KeyboardInterrupt:
-            # Show cursor again before exiting
             print("\033[?25h", end="")
             print("Dashboard terminated.")
         finally:
-            # Always ensure cursor is visible when exiting
-            print("\033[?25h", end="")
-
-            # Clean up curses if used
+            print("\033[?25h", end="")  # Ensure cursor is visible
             if os.name != "nt":
-                curses.echo()
+                # Clean up curses environment
                 curses.nocbreak()
+                stdscr.keypad(False)
+                curses.echo()
                 curses.endwin()
 
 
 if __name__ == "__main__":
-    # Set terminal title
+    # Set terminal title (may not work on all terminals)
     print("\033]0;Baseline\007", end="")
+    # Apply terminal styling (may not work on all terminals)
+    print("\033]10;#FFBF00\007", end="")
+    print("\033]11;#000000\007", end="")
 
-    # Apply terminal styling for amber-on-black effect
-    # Note: This may not work in all terminals
-    print("\033]10;#FFBF00\007", end="")  # Set text color to amber
-    print("\033]11;#000000\007", end="")  # Set background to black
-
-    # Run the dashboard
     dashboard = Baseline()
     dashboard.run()
